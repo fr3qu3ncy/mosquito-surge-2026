@@ -87,10 +87,10 @@ header.hero { padding: 3.5rem 0 2rem; border-bottom: 1px solid var(--border); ma
 h1 { font-size: 2.6rem; line-height: 1.15; margin: 0.5rem 0 0.75rem; }
 .sub { color: var(--dim); font-size: 1.15rem; max-width: 60ch; }
 .meta { margin-top: 1rem; color: var(--dim); font-size: 0.95rem; }
-nav.toc { position: sticky; top: 0; z-index: 10; background: rgba(13,17,23,0.92); backdrop-filter: blur(8px);
-          border-bottom: 1px solid var(--border); padding: 0.6rem 0; margin: 0 0 2.5rem; font-size: 0.9rem; }
-nav.toc .wrap { display: flex; flex-wrap: wrap; gap: 0.35rem 1rem; padding-bottom: 0; }
-nav.toc a { color: var(--dim); text-decoration: none; padding: 0.2rem 0.1rem; }
+nav.toc { position: sticky; top: 0; z-index: 10; background: rgba(13,17,23,0.97); backdrop-filter: blur(8px);
+          border-bottom: 1px solid var(--border); margin-bottom: 0; }
+nav.toc .wrap { display: flex; flex-wrap: wrap; gap: 0.15rem 1.4rem; padding-top: 0.55rem; padding-bottom: 0.55rem; }
+nav.toc a { color: var(--dim); text-decoration: none; font-size: 0.95rem; font-weight: 500; }
 nav.toc a:hover { color: var(--text); }
 section { margin-bottom: 3rem; }
 h2 { font-size: 1.7rem; margin-bottom: 1rem; padding-bottom: 0.4rem; border-bottom: 2px solid var(--border); }
@@ -119,6 +119,19 @@ tr:last-child td { border-bottom: none; }
 .chart-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1rem; margin: 1.25rem 0; overflow-x: auto; }
 .chart-card svg { width: 100%; height: auto; min-width: 640px; }
 .chart-cap { color: var(--dim); font-size: 0.88rem; margin-top: 0.5rem; }
+.listen-card { border: 1px solid var(--accent); border-radius: 12px; padding: 1.4rem 1.5rem; margin: 2rem 0 3rem;
+               background: linear-gradient(135deg, rgba(86,211,100,0.07), rgba(22,27,34,1) 45%); }
+.listen-card h2 { border: none; font-size: 1.35rem; margin-bottom: 0.3rem; }
+.listen-sub { color: var(--dim); font-size: 0.95rem; margin-bottom: 1rem; }
+.player { display: flex; align-items: center; gap: 0.9rem; }
+.play-btn { flex: 0 0 auto; width: 52px; height: 52px; border-radius: 50%; border: none; cursor: pointer;
+            background: var(--accent); color: #0d1117; display: flex; align-items: center; justify-content: center;
+            font-size: 1.3rem; line-height: 1; }
+.play-btn:hover { filter: brightness(1.15); }
+.player-track { flex: 1 1 auto; display: flex; flex-direction: column; gap: 0.35rem; }
+.player-bar { height: 8px; background: #30363d; border-radius: 999px; cursor: pointer; position: relative; overflow: hidden; }
+.player-fill { height: 100%; width: 0%; background: var(--accent); border-radius: 999px; }
+.player-times { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--dim); font-variant-numeric: tabular-nums; }
 .species { border: 1px solid var(--border); border-radius: 12px; padding: 1rem 1.2rem; margin-bottom: 0.8rem; background: var(--card); }
 .species .name { font-weight: 700; font-size: 1.05rem; }
 .species .sci { font-style: italic; color: var(--dim); font-weight: 400; }
@@ -127,40 +140,89 @@ tr:last-child td { border-bottom: none; }
 .tag.biter { background: rgba(227,179,65,0.15); color: var(--amber); }
 .tag.nuisance { background: rgba(86,211,100,0.15); color: var(--accent); }
 .tag.invasive { background: rgba(248,81,73,0.15); color: #f85149; }
-footer { border-top: 1px solid var(--border); padding-top: 1.5rem; color: var(--dim); font-size: 0.92rem; }
+footer { border-top: 1px solid var(--border); margin-top: 1rem; color: var(--dim); font-size: 0.92rem; }
+footer .wrap { padding-top: 1.5rem; padding-bottom: 2.5rem; }
 @media (max-width: 600px) { h1 { font-size: 1.9rem; } h2 { font-size: 1.4rem; } body { font-size: 1rem; } }
 """
 
 # ---- Content ----
 SECTIONS = []
 
+SECTIONS.append("""
+<nav class="toc"><div class="wrap">
+  <a href="#listen">Listen</a>
+  <a href="#tldr">Summary</a>
+  <a href="#london">The London species</a>
+  <a href="#local">Who's biting you</a>
+  <a href="#action">What to do</a>
+  <a href="#outlook">Bigger picture</a>
+  <a href="#sources">Sources</a>
+</div></nav>
+""")
+
 SECTIONS.append(f"""
 <header class="hero">
-<div class="wrap">
   <div class="kicker">Deep dive &middot; 17 September 2026</div>
   <h1>The UK Mosquito Surge, 2026</h1>
   <p class="sub">Why north Cambridgeshire has been overrun for the past month &mdash; what the new
   &ldquo;London species&rdquo; story actually is, which mosquitoes are really biting, and what you can do
   about it.</p>
   <div class="meta">Compiled from UKHSA, LSHTM, Met Office and press reporting &middot; Weather data:
-  Open-Meteo archive for Ely (52.40N, 0.27W) &middot; Written for the Whichford / Ely neighbourhood</div>
-</div>
+  Open-Meteo archive for Ely (52.40N, 0.27W) &middot; 17 September 2026</div>
 </header>
 """)
 
-SECTIONS.append("""
-<nav class="toc"><div class="wrap">
-  <a href="#tldr">Summary</a>
-  <a href="#records">1. A record summer</a>
-  <a href="#ely">2. Ely's weather</a>
-  <a href="#london">3. The London species</a>
-  <a href="#local">4. Who's biting you</a>
-  <a href="#mechanism">5. Why the surge</a>
-  <a href="#fens">6. The Fenland factor</a>
-  <a href="#action">7. What to do</a>
-  <a href="#outlook">8. Bigger picture</a>
-  <a href="#sources">Sources</a>
-</div></nav>
+PLAYER_JS = '''
+(function(){
+  var audio = document.getElementById('podcast-audio');
+  var btn = document.getElementById('play-btn');
+  var fill = document.getElementById('player-fill');
+  var bar = document.getElementById('player-bar');
+  var cur = document.getElementById('player-cur');
+  var tot = document.getElementById('player-tot');
+  function fmt(s){
+    if(!isFinite(s)) return '0:00';
+    s = Math.floor(s);
+    var m = Math.floor(s/60);
+    var ss = String(s%60).padStart(2,'0');
+    return m + ':' + ss;
+  }
+  btn.addEventListener('click', function(){
+    if(audio.paused) audio.play(); else audio.pause();
+  });
+  audio.addEventListener('play', function(){ btn.textContent = '\\u23F8\\uFE0F'; });
+  audio.addEventListener('pause', function(){ btn.textContent = '\\u25B6'; });
+  audio.addEventListener('ended', function(){ btn.textContent = '\\u25B6'; });
+  audio.addEventListener('loadedmetadata', function(){ tot.textContent = fmt(audio.duration); });
+  audio.addEventListener('timeupdate', function(){
+    cur.textContent = fmt(audio.currentTime);
+    if(audio.duration) fill.style.width = (100*audio.currentTime/audio.duration) + '%';
+  });
+  bar.addEventListener('click', function(e){
+    var r = bar.getBoundingClientRect();
+    var p = (e.clientX - r.left) / r.width;
+    if(isFinite(audio.duration)) audio.currentTime = p * audio.duration;
+  });
+})();
+'''
+
+SECTIONS.append(f"""
+<section id="listen">
+<div class="listen-card">
+  <h2>&#127911; Listen &mdash; 6 minute audio briefing</h2>
+  <div class="listen-sub">The full story as a podcast: the record summer, the London species, the
+  weather mechanism, and what to do about it.</div>
+  <div class="player">
+    <button class="play-btn" id="play-btn" aria-label="Play audio briefing">&#9654;</button>
+    <div class="player-track">
+      <div class="player-bar" id="player-bar"><div class="player-fill" id="player-fill"></div></div>
+      <div class="player-times"><span id="player-cur">0:00</span><span id="player-tot">0:00</span></div>
+    </div>
+  </div>
+  <audio id="podcast-audio" src="podcast.mp3" preload="metadata"></audio>
+</div>
+</section>
+{PLAYER_JS}
 """)
 
 SECTIONS.append("""
@@ -186,11 +248,12 @@ you in Ely.</strong></li>
 <li><strong>Your bites are from native species</strong> &mdash; chiefly <em>Culex pipiens</em>,
 <em>Culiseta annulata</em> and, in the Fens, <em>Aedes vexans</em> (the floodwater mosquito). They do
 not carry serious disease; the risk from UK mosquitoes is very low. The problem is pure nuisance, and
-it is local: your neighbours are affected too, which means there's a shared breeding source within a
-few hundred metres &mdash; most likely standing water in gardens, water butts, ponds or ditches.</li>
+it is local: a whole street or neighbourhood is usually affected at once, which points to a shared
+breeding source within a few hundred metres &mdash; most likely standing water in gardens, water butts,
+ponds or ditches.</li>
 <li><strong>You can make a real difference.</strong> Mosquitoes breed in small amounts of standing
-water. Eliminating every water-holding container within ~200m of your houses, twice a week, will
-genuinely cut the next generation. Full checklist in section 7.</li>
+water. Eliminating every water-holding container within ~200m, twice a week, will genuinely cut the
+next generation. Full checklist in section 7.</li>
 </ul>
 </div>
 </section>
@@ -307,10 +370,10 @@ population. It is the next most likely candidate for a UK foothold, and UKHSA's 
 is concentrated on exactly the kind of sites (ports, service stations, distribution hubs) where it
 would arrive.</p>
 <div class="card callout">
-<strong>TL;DR for the neighbour conversation:</strong> the London story is a genuine climate milestone,
-but it's geographically isolated, already controlled, and biologically unrelated to what's flying in
-your garden this September. Don't let it scare you into thinking you're at risk of dengue. <em>Do</em>
-let it frame the bigger picture in section 8.
+<strong>TL;DR:</strong> the London story is a genuine climate milestone, but it's geographically
+isolated, already controlled, and biologically unrelated to what's flying in gardens across the
+country this September. Don't let it scare you into thinking you're at risk of dengue. <em>Do</em> let
+it frame the bigger picture in section 8.
 </div>
 </section>
 """)
@@ -399,7 +462,7 @@ autumn, and the Met Office is forecasting a wetter, stormier autumn (El Ni&ntild
 could support another partial generation.</li>
 </ol>
 <div class="card callout">
-<strong>The one-line explanation for the neighbour:</strong> &ldquo;The heatwave let them build up all
+<strong>The one-line explanation:</strong> &ldquo;The heatwave let them build up all
 summer, and the rain in late August flushed the ditches full of newly hatched mosquitoes all at once.
 It's the weather, and it's all over the country &mdash; the NHS bite-page visits went up a third this
 summer.&rdquo;
@@ -425,8 +488,8 @@ mosquito hatchery filling to the brim.</li>
 specialist &mdash; it breeds on the margins of fluctuating water exactly where our drainage meets the
 fens. In drier counties with rockier ground, a wet month is a nuisance; here it's a population
 reset button.</li>
-<li><strong>Local, not exotic.</strong> The fact that your house and the one next door are both
-affected strongly points to a shared local source &mdash; a ditch, drain, pond or cluster of gardens
+<li><strong>Local, not exotic.</strong> The fact that a whole street or neighbourhood is affected at
+once strongly points to a shared local source &mdash; a ditch, drain, pond or cluster of gardens
 within a couple of hundred metres. Adult <em>Culex</em> and <em>A. vexans</em> don't fly far; this is
 a neighbourhood-scale problem, which means it's also a neighbourhood-scale fix (section 7).</li>
 <li><strong>The drainage paradox.</strong> When the internal drainage boards run channels high (or a
@@ -530,7 +593,7 @@ rising over decades, not years &mdash; is the honest one. The practical conseque
 it's the same standing-water hygiene that solves your September problem, done consistently.</li>
 </ul>
 <div class="card tldr">
-<strong>Bottom line for Whichford:</strong> 2026 was a freak-perfect year for mosquitoes &mdash;
+<strong>Bottom line:</strong> 2026 was a freak-perfect year for mosquitoes &mdash;
 record heat + drought + a late deluge + a Fenland landscape full of floodwater eggs. It's a nuisance
 event, not a disease event. Clear the water, treat the ponds with Bti, mesh the bedroom, and expect
 the pressure to ease as the nights cool below ~15&deg;C. And keep an eye on UKHSA if the London
@@ -575,12 +638,15 @@ HTML = f"""<!DOCTYPE html>
 <style>{CSS}</style>
 </head>
 <body>
-{''.join(SECTIONS)}
+{SECTIONS[0]}
+<main class="wrap">
+{''.join(SECTIONS[1:])}
+</main>
 <footer>
 <div class="wrap">
 <p>Compiled 17 September 2026 &middot; Weather data: Open-Meteo archive (Ely) &middot; News and
 official reporting from 26 June &ndash; 16 September 2026. This page is an informational summary for
-neighbourly discussion, not medical advice &mdash; for bite-related health concerns see the NHS or
+neighbourly sharing, not medical advice &mdash; for bite-related health concerns see the NHS or
 your GP; for mosquito sightings report to UKHSA Mosquito Watch.</p>
 </div>
 </footer>
