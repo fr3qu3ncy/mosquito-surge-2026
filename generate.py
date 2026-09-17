@@ -1,0 +1,634 @@
+#!/usr/bin/env python3
+"""Generate the UK Mosquito Surge 2026 report site (static, dark theme)."""
+import json, os
+
+BASE = "/tmp/mosquito_site"
+os.makedirs(BASE, exist_ok=True)
+
+# ---- Load Ely weather data for the chart ----
+with open("/tmp/mosquito_research/ely_weather.json") as f:
+    wx = json.load(f)["daily"]
+
+from datetime import date
+from collections import defaultdict
+weeks = defaultdict(lambda: {"rain": 0.0, "max_tmax": 0.0, "label": ""})
+for i, t in enumerate(wx["time"]):
+    d = date.fromisoformat(t)
+    iso = d.isocalendar()
+    if iso[1] < 27 or iso[1] > 38:
+        continue
+    wk = weeks[iso[1]]
+    wk["rain"] += wx["precipitation_sum"][i] or 0
+    wk["max_tmax"] = max(wk["max_tmax"], wx["temperature_2m_max"][i] or 0)
+    wk["label"] = f"W{iso[1]}"
+    d2 = date.fromisocalendar(iso[0], iso[1], 1)
+    wk["range"] = f"{d2.day}/{d2.month}"
+
+wks = sorted(weeks)
+wk_data = [weeks[w] for w in wks]
+
+# ---- SVG chart: rain bars + tmax line ----
+W, H = 860, 340
+ML, MR, MT, MB = 52, 18, 26, 46
+pw = W - ML - MR
+ph = H - MT - MB
+max_rain = 45.0  # mm
+max_t = 36.0     # C
+n = len(wk_data)
+bw = pw / n * 0.55
+
+def x(i): return ML + pw * (i + 0.5) / n
+def yr(mm): return MT + ph * (1 - mm / max_rain)
+def yt(c): return MT + ph * (1 - c / max_t)
+
+svg = [f'<svg viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg" role="img" '
+       f'aria-label="Ely weekly rainfall and maximum temperature, July to September 2026">']
+# gridlines
+for g in (0, 10, 20, 30, 40):
+    y = yr(g)
+    svg.append(f'<line x1="{ML}" y1="{y:.1f}" x2="{W-MR}" y2="{y:.1f}" stroke="#30363d" stroke-width="1"/>')
+    svg.append(f'<text x="{ML-8}" y="{y+4:.1f}" text-anchor="end" font-size="11" fill="#8b949e">{g}mm</text>')
+# rain bars
+for i, w in enumerate(wk_data):
+    bx = x(i) - bw/2
+    top = yr(w["rain"])
+    col = "#58a6ff" if w["rain"] < 10 else "#79c0ff"
+    svg.append(f'<rect x="{bx:.1f}" y="{top:.1f}" width="{bw:.1f}" height="{MT+ph-top:.1f}" rx="3" fill="{col}" opacity="0.85"/>')
+    if w["rain"] >= 10:
+        svg.append(f'<text x="{x(i):.1f}" y="{top-6:.1f}" text-anchor="middle" font-size="11" fill="#79c0ff" font-weight="700">{w["rain"]:.0f}mm</text>')
+# tmax line
+pts = " ".join(f"{x(i):.1f},{yt(w['max_tmax']):.1f}" for i, w in enumerate(wk_data))
+svg.append(f'<polyline points="{pts}" fill="none" stroke="#f0883e" stroke-width="2.5"/>')
+for i, w in enumerate(wk_data):
+    svg.append(f'<circle cx="{x(i):.1f}" cy="{yt(w["max_tmax"]):.1f}" r="4" fill="#f0883e"/>')
+    svg.append(f'<text x="{x(i):.1f}" y="{yt(w["max_tmax"])-10:.1f}" text-anchor="middle" font-size="11" fill="#f0883e" font-weight="700">{w["max_tmax"]:.0f}°</text>')
+# x labels
+for i, w in enumerate(wk_data):
+    svg.append(f'<text x="{x(i):.1f}" y="{H-22}" text-anchor="middle" font-size="11" fill="#8b949e">{w["label"]}</text>')
+    svg.append(f'<text x="{x(i):.1f}" y="{H-8}" text-anchor="middle" font-size="10" fill="#6e7681">{w["range"]}</text>')
+# legend
+svg.append(f'<rect x="{ML}" y="{MT-18}" width="12" height="12" rx="2" fill="#58a6ff"/>')
+svg.append(f'<text x="{ML+16}" y="{MT-8}" font-size="12" fill="#c9d1d9">Weekly rainfall (mm)</text>')
+svg.append(f'<line x1="{ML+150}" y1="{MT-12}" x2="{ML+178}" y2="{MT-12}" stroke="#f0883e" stroke-width="2.5"/>')
+svg.append(f'<text x="{ML+184}" y="{MT-8}" font-size="12" fill="#c9d1d9">Warmest day (°C)</text>')
+svg.append('</svg>')
+CHART = "\n".join(svg)
+
+# ---- CSS ----
+CSS = """
+:root { --bg:#0d1117; --card:#161b22; --text:#e6edf3; --dim:#8b949e; --border:#30363d;
+        --accent:#56d364; --amber:#e3b341; --blue:#58a6ff; --orange:#f0883e; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+       font-size: 1.08rem; line-height: 1.65; }
+.wrap { max-width: 880px; margin: 0 auto; padding: 0 1.25rem 4rem; }
+header.hero { padding: 3.5rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2rem; }
+.kicker { color: var(--accent); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+h1 { font-size: 2.6rem; line-height: 1.15; margin: 0.5rem 0 0.75rem; }
+.sub { color: var(--dim); font-size: 1.15rem; max-width: 60ch; }
+.meta { margin-top: 1rem; color: var(--dim); font-size: 0.95rem; }
+nav.toc { position: sticky; top: 0; z-index: 10; background: rgba(13,17,23,0.92); backdrop-filter: blur(8px);
+          border-bottom: 1px solid var(--border); padding: 0.6rem 0; margin: 0 0 2.5rem; font-size: 0.9rem; }
+nav.toc .wrap { display: flex; flex-wrap: wrap; gap: 0.35rem 1rem; padding-bottom: 0; }
+nav.toc a { color: var(--dim); text-decoration: none; padding: 0.2rem 0.1rem; }
+nav.toc a:hover { color: var(--text); }
+section { margin-bottom: 3rem; }
+h2 { font-size: 1.7rem; margin-bottom: 1rem; padding-bottom: 0.4rem; border-bottom: 2px solid var(--border); }
+h2 .num { color: var(--accent); margin-right: 0.5rem; }
+h3 { font-size: 1.2rem; margin: 1.5rem 0 0.6rem; color: var(--text); }
+p { margin-bottom: 1rem; }
+ul, ol { margin: 0 0 1rem 1.4rem; }
+li { margin-bottom: 0.45rem; }
+a { color: var(--blue); }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1.4rem 1.5rem; margin: 1.25rem 0; }
+.tldr { border-left: 4px solid var(--accent); }
+.tldr h2 { border: none; font-size: 1.35rem; margin-bottom: 0.8rem; }
+.warn { border-left: 4px solid var(--amber); }
+.callout { border-left: 4px solid var(--blue); }
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.8rem; margin: 1.25rem 0; }
+.stat { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1rem; text-align: center; }
+.stat .v { font-size: 1.9rem; font-weight: 800; }
+.stat .l { font-size: 0.8rem; color: var(--dim); margin-top: 0.2rem; line-height: 1.3; }
+.stat .v.hot { color: var(--orange); } .stat .v.rain { color: var(--blue); }
+.stat .v.green { color: var(--accent); } .stat .v.amber { color: var(--amber); }
+table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.98rem; }
+th { text-align: left; color: var(--dim); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em;
+     padding: 0.5rem 0.6rem; border-bottom: 2px solid var(--border); }
+td { padding: 0.55rem 0.6rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+.chart-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1rem; margin: 1.25rem 0; overflow-x: auto; }
+.chart-card svg { width: 100%; height: auto; min-width: 640px; }
+.chart-cap { color: var(--dim); font-size: 0.88rem; margin-top: 0.5rem; }
+.species { border: 1px solid var(--border); border-radius: 12px; padding: 1rem 1.2rem; margin-bottom: 0.8rem; background: var(--card); }
+.species .name { font-weight: 700; font-size: 1.05rem; }
+.species .sci { font-style: italic; color: var(--dim); font-weight: 400; }
+.species .tag { display: inline-block; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+                padding: 0.15rem 0.55rem; border-radius: 999px; margin-left: 0.5rem; vertical-align: middle; }
+.tag.biter { background: rgba(227,179,65,0.15); color: var(--amber); }
+.tag.nuisance { background: rgba(86,211,100,0.15); color: var(--accent); }
+.tag.invasive { background: rgba(248,81,73,0.15); color: #f85149; }
+footer { border-top: 1px solid var(--border); padding-top: 1.5rem; color: var(--dim); font-size: 0.92rem; }
+@media (max-width: 600px) { h1 { font-size: 1.9rem; } h2 { font-size: 1.4rem; } body { font-size: 1rem; } }
+"""
+
+# ---- Content ----
+SECTIONS = []
+
+SECTIONS.append(f"""
+<header class="hero">
+<div class="wrap">
+  <div class="kicker">Deep dive &middot; 17 September 2026</div>
+  <h1>The UK Mosquito Surge, 2026</h1>
+  <p class="sub">Why north Cambridgeshire has been overrun for the past month &mdash; what the new
+  &ldquo;London species&rdquo; story actually is, which mosquitoes are really biting, and what you can do
+  about it.</p>
+  <div class="meta">Compiled from UKHSA, LSHTM, Met Office and press reporting &middot; Weather data:
+  Open-Meteo archive for Ely (52.40N, 0.27W) &middot; Written for the Whichford / Ely neighbourhood</div>
+</div>
+</header>
+""")
+
+SECTIONS.append("""
+<nav class="toc"><div class="wrap">
+  <a href="#tldr">Summary</a>
+  <a href="#records">1. A record summer</a>
+  <a href="#ely">2. Ely's weather</a>
+  <a href="#london">3. The London species</a>
+  <a href="#local">4. Who's biting you</a>
+  <a href="#mechanism">5. Why the surge</a>
+  <a href="#fens">6. The Fenland factor</a>
+  <a href="#action">7. What to do</a>
+  <a href="#outlook">8. Bigger picture</a>
+  <a href="#sources">Sources</a>
+</div></nav>
+""")
+
+SECTIONS.append("""
+<section id="tldr">
+<div class="card tldr">
+<h2>&#9889; The short version</h2>
+<ul>
+<li><strong>You are not imagining it.</strong> Summer 2026 was the UK's hottest on record, with six
+heatwaves. NHS England saw a <strong>35% jump</strong> in visits to its bite-and-sting advice pages
+between May and July, and hospital presentations for insect bites more than doubled in May. This has
+been a national event, not a local one.</li>
+<li><strong>The weather sequence is the culprit.</strong> A long, dry, 30&deg;C+ spell through July and
+early August let native mosquito populations build up fast (heat speeds every life-stage), then
+<strong>~115mm of rain landed in late August and early September</strong> &mdash; exactly the trigger
+that floods ditches and launches a mass hatch of floodwater species. Warm + wet + late summer = the
+worst-case mosquito recipe.</li>
+<li><strong>The &ldquo;new species in London&rdquo; is real but not your problem.</strong> On 3 September,
+UKHSA confirmed <em>Aedes aegypti</em> &mdash; the dengue/Zika-carrying yellow fever mosquito &mdash;
+was found <strong>breeding in east London homes for the first time in the UK</strong>. It is a genuine
+first and a climate-change milestone. But it was an accidental importation, is 60+ miles away, was
+confined to a few properties, and its larvae have been destroyed. <strong>It is not the mosquito biting
+you in Ely.</strong></li>
+<li><strong>Your bites are from native species</strong> &mdash; chiefly <em>Culex pipiens</em>,
+<em>Culiseta annulata</em> and, in the Fens, <em>Aedes vexans</em> (the floodwater mosquito). They do
+not carry serious disease; the risk from UK mosquitoes is very low. The problem is pure nuisance, and
+it is local: your neighbours are affected too, which means there's a shared breeding source within a
+few hundred metres &mdash; most likely standing water in gardens, water butts, ponds or ditches.</li>
+<li><strong>You can make a real difference.</strong> Mosquitoes breed in small amounts of standing
+water. Eliminating every water-holding container within ~200m of your houses, twice a week, will
+genuinely cut the next generation. Full checklist in section 7.</li>
+</ul>
+</div>
+</section>
+""")
+
+SECTIONS.append(f"""
+<section id="records">
+<h2><span class="num">1</span> A record-breaking summer &mdash; the national backdrop</h2>
+<p>2026 was not just a hot summer &mdash; it was the most extreme in the UK's meteorological record.
+Six separate heatwaves were declared, and records fell all over the map:</p>
+<div class="stat-row">
+<div class="stat"><div class="v hot">38.0&deg;C</div><div class="l">Hottest June day on record (Lingwood, Norfolk, 26 June) &mdash; 5th hottest day in UK history</div></div>
+<div class="stat"><div class="v hot">35.1&deg;C</div><div class="l">Hottest May day on record (Kew Gardens, 26 May), breaking a record from 1922</div></div>
+<div class="stat"><div class="v hot">6</div><div class="l">Declared heatwaves (May, June, July, late July, 2 Aug, 9 Aug) &mdash; first year 35&deg;C+ in three separate months</div></div>
+<div class="stat"><div class="v amber">3 days</div><div class="l">Consecutive <strong>red</strong> heat warnings (24&ndash;26 June) &mdash; the first reds ever for Wales, only 2nd time nationally</div></div>
+</div>
+<p>The dry conditions went with the heat. The Environment Agency declared drought across more than half
+of England and all of Wales; as of mid-September, three-quarters of England remained in drought and
+reservoirs were ~20% below normal levels. That dryness is the first half of the mosquito story (section
+5) &mdash; it let egg and larval populations accumulate without drowning in their own floods, and kept
+out the cold, wet weather that normally suppresses UK summers.</p>
+<p>The bite toll was measurable. NHS England's own website saw <strong>90,206 &rarr; 121,976 visits
+(+35.2%)</strong> to its bites-and-stings page between May and July. Hospital visits for insect and
+spider bites more than doubled in May, the month of the first heatwave, and the National Pharmacy
+Association reported a clear increase in customers presenting with <em>infected</em> mosquito bites
+&mdash; a reminder that the real medical risk of a UK bite is a scratched-up infection, not a tropical
+disease.</p>
+<div class="card callout">
+<strong>Expert framing.</strong> Dr Lauren Cator (Imperial College, vector ecology) put it plainly for
+<i>The i</i>: the &ldquo;home range&rdquo; &mdash; where disease-carrying mosquitoes can breed year-round
+&mdash; has &ldquo;crept all the way up through the Mediterranean Basin and now up into Europe&hellip;
+it has not as far to go to get into the UK.&rdquo; Britain is now at the upper end of the thermal limit
+for species that were tropical a few decades ago.
+</div>
+</section>
+""")
+
+SECTIONS.append(f"""
+<section id="ely">
+<h2><span class="num">2</span> Ely's summer: dry heat, then the deluge</h2>
+<p>This is actual weather data for Ely (Open-Meteo reanalysis archive), 1 July &ndash; 16 September
+2026. Look at the shape of it: <strong>seven near-dry weeks of 30&deg;C+ heat, then four wet weeks in
+a row</strong>. That is not normal &mdash; it's the exact sequence that produces a late-summer mosquito
+explosion.</p>
+<div class="chart-card">
+{CHART}
+<div class="chart-cap">Weekly totals for Ely, ISO weeks 27&ndash;38 (late June to mid-September 2026).
+Bars: rainfall (mm); line: warmest day of the week (&deg;C).</div>
+</div>
+<ul>
+<li><strong>Weeks 27&ndash;33 (late June &ndash; mid-August): almost zero rain.</strong> Less than 13mm
+total over seven weeks. The warmest days hit 31.3&deg;C (9 July), 32.1&deg;C (29 July) and
+<strong>32.9&deg;C (13 August)</strong>. Hot and bone dry &mdash; eggs laid in early summer matured
+rapidly, and the absence of flooding meant no mass drowning of larvae.</li>
+<li><strong>Week 34 (17&ndash;23 Aug): 34.5mm</strong> &mdash; the first big soak.</li>
+<li><strong>Week 35 (24&ndash;30 Aug): 38.9mm, the wettest week</strong>, including 16.9mm on 27 August
+in a single day, with temperatures still 19&ndash;25&deg;C.</li>
+<li><strong>Weeks 36&ndash;37 (31 Aug &ndash; 13 Sept): another 40.7mm</strong> spread over two
+mild weeks.</li>
+</ul>
+<p>In plain terms: <strong>~115mm of rain in the five weeks from 17 August to 16 September</strong>,
+arriving while the weather was still warm enough for mosquitoes to stay active. Female mosquitoes had
+been building up all summer; that rain then flooded every ditch, drain, water butt and container at
+once &mdash; and a floodwater species like <em>Aedes vexans</em> is essentially <em>waiting</em> for
+this trigger. What you're experiencing right now is the hatched generation coming out of that water.</p>
+</section>
+""")
+
+SECTIONS.append("""
+<section id="london">
+<h2><span class="num">3</span> The &ldquo;new species in London&rdquo;: Aedes aegypti</h2>
+<p>You found this yourself, so let's do it properly. On <strong>3 September 2026</strong>, the UK Health
+Security Agency (UKHSA) confirmed that <em>Aedes aegypti</em> &mdash; the yellow fever mosquito &mdash;
+had been found <strong>breeding at residential properties in east London</strong>. The key facts:</p>
+<ul>
+<li><strong>First breeding in the UK.</strong> This is the fourth modern detection of the species in
+Britain, but the first time eggs/larvae have been found. Earlier sightings (2023&ndash;2025) were
+single adults that died without breeding.</li>
+<li><strong>Found by citizen science.</strong> The initial report came through UKHSA's
+<em>Mosquito Watch</em> scheme &mdash; people sending in photos of suspicious biting mosquitoes.</li>
+<li><strong>What it does.</strong> <em>Ae. aegypti</em> is native to North Africa and lives across the
+tropics. It is the main vector for <strong>dengue, chikungunya, Zika and yellow fever</strong>.
+(Notably it does <em>not</em> carry malaria.) It bites at dusk and dawn and indoors &mdash; a very
+different pattern from most native UK species.</li>
+<li><strong>How it got here.</strong> Almost certainly accidental importation &mdash; hitchhiking in
+vehicles, baggage or potted plants. UKHSA's head of medical entomology, Dr Jolyon Medlock, was explicit
+that they are believed to be &ldquo;accidental importations&rdquo;.</li>
+<li><strong>Response.</strong> Larvae destroyed; a 300-metre radius inspected for standing water and
+treated; adult traps deployed; monitoring ongoing for several weeks under the National Contingency Plan
+for Invasive Mosquitoes.</li>
+<li><strong>Risk assessment: very low.</strong> No human infections; no mosquitoes or larvae found in
+nearby public areas; and the UK climate is still too cold for the species to survive winter. It has
+never overwintered anywhere in northern Europe &mdash; its only European strongholds are the
+Mediterranean. Oxford's Dr C&eacute;sar L&oacute;pez-Camacho called it an &ldquo;early warning rather than
+an immediate public-health threat&rdquo;; LSHTM called it a &ldquo;milestone event&rdquo;.</li>
+</ul>
+<div class="card warn">
+<strong>What it means &mdash; and doesn't mean.</strong> It does <em>not</em> mean London (let alone
+Ely) now has dengue-transmitting mosquitoes. For local transmission you'd need: a person infected with
+dengue/Chik/Zika (usually returning from abroad) &rarr; bitten by <em>Ae. aegypti</em> &rarr; the
+mosquito surviving 10&ndash;14 days &rarr; biting someone else. With the London population eradicated,
+that chain is closed. What it <em>does</em> mean is that incursions are becoming more common and that
+a species that historically couldn't even survive a UK summer is now completing a full breeding cycle
+here. UKHSA expects this to happen again &mdash; and to get more survivable &mdash; as the climate
+warms. For context: in late August 2026, France reported <em>locally transmitted</em> dengue, West
+Nile and chikungunya cases across the country including Paris &mdash; the scenario the London finding
+is a warning about, one step further along.
+</div>
+<h3>And the Asian tiger mosquito?</h3>
+<p><em>Aedes albopictus</em> (the &ldquo;tiger mosquito&rdquo;, another dengue-capable daytime biter)
+has had its own run of near-misses: eggs found in Kent in 2016, again 2017&ndash;2019, and in August
+2024 at an M20 service area &mdash; every time followed by surveillance that found no established
+population. It is the next most likely candidate for a UK foothold, and UKHSA's ovitrap surveillance
+is concentrated on exactly the kind of sites (ports, service stations, distribution hubs) where it
+would arrive.</p>
+<div class="card callout">
+<strong>TL;DR for the neighbour conversation:</strong> the London story is a genuine climate milestone,
+but it's geographically isolated, already controlled, and biologically unrelated to what's flying in
+your garden this September. Don't let it scare you into thinking you're at risk of dengue. <em>Do</em>
+let it frame the bigger picture in section 8.
+</div>
+</section>
+""")
+
+SECTIONS.append("""
+<section id="local">
+<h2><span class="num">4</span> Who is actually biting you</h2>
+<p>Over 30 mosquito species are native to Britain. The ones that matter for a house in the Fens,
+summarised from LSHTM's June 2026 briefing (Dr Mojca Kristan, medical entomology):</p>
+
+<div class="species"><span class="name">Floodwater mosquito <span class="sci">Aedes vexans</span></span>
+<span class="tag biter">Prime suspect</span>
+<p>Breeds on floodplains, river margins and low-lying land where water levels fluctuate. Its eggs
+survive desiccation for months and hatch <em>en masse</em> when the water returns &mdash; precisely
+what happened in the Fens when the August/September rain came after the dry spell. Active at dusk and
+dawn; aggressive and persistent. In a landscape like ours, this is the species that turns a wet month
+into a swarm.</p></div>
+
+<div class="species"><span class="name">Common house mosquito <span class="sci">Culex pipiens</span></span>
+<span class="tag biter">Garden biter</span>
+<p>Breeds in ponds, ditches, water butts, buckets, bird baths &mdash; almost anything holding water.
+Overwinters as an adult, so the first warm days of spring produce early-season bites (2026 saw an
+unusually early spring spike, partly because the start of the year was one of the wettest on record).
+Mostly a night-time biter; the classic &ldquo;mosquito in the bedroom&rdquo;.</p></div>
+
+<div class="species"><span class="name">&ldquo;London Underground&rdquo; mosquito <span class="sci">Culex pipiens f. molestus</span></span>
+<span class="tag nuisance">Urban</span>
+<p>A subspecies that has moved into warm urban infrastructure &mdash; sewers, pipes, drains, cellars.
+Active even in winter. Less likely to be your main problem in the Fens, but worth knowing if you get
+bites indoors on a cold day in January.</p></div>
+
+<div class="species"><span class="name">&ldquo;House&rdquo; mosquito <span class="sci">Culiseta annulata</span></span>
+<span class="tag biter">Persistent biter</span>
+<p>One of the most common UK species and a genuinely persistent biter: adults don't true-hibernate and
+start seeking blood when temperatures rise above ~7&deg;C. Likes ponds, ditches, water butts and
+cisterns. A named driver of the late-season activity UK experts flagged this week.</p></div>
+
+<div class="species"><span class="name">Marsh mosquito <span class="sci">Anopheles plumbeus</span></span>
+<span class="tag biter">Moving into gardens</span>
+<p>Historically a tree-hole and woodland breeder, but recently spreading into urban and garden
+environments (bird baths, containers). A persistent nuisance biter, and the UK species most studied as
+a potential West Nile vector &mdash; no UK human cases, though West Nile <em>was</em> first detected in
+UK mosquitoes (Nottinghamshire) in 2025.</p></div>
+
+<div class="species"><span class="name">River marsh mosquito <span class="sci">Anopheles claviger</span></span>
+<span class="tag nuisance">Ditches &amp; drains</span>
+<p>Overwinters as a larva in ditches, streams, temporary pools and even garden tanks and rain barrels;
+adults can appear from late winter. A contributor to early-season bites in fen country.</p></div>
+
+<div class="card callout">
+<strong>Which are &ldquo;invasive&rdquo;?</strong> None of the above &mdash; they're all British.
+The invasive species to watch (<span class="tag invasive" style="margin-left:0">Ae. aegypti</span>
+<span class="tag invasive" style="margin-left:0">Ae. albopictus</span>) are small, black, and marked
+with white &mdash; if you actually see one, that's a report-to-UKHSA event, not a garden problem.
+Native UK mosquitoes do not transmit dengue, Zika, chikungunya or yellow fever.
+</div>
+</section>
+""")
+
+SECTIONS.append("""
+<section id="mechanism">
+<h2><span class="num">5</span> Why the surge is happening now &mdash; the mechanism</h2>
+<p>Mosquito population size is the product of three things: <strong>development speed, survival, and
+breeding water</strong>. 2026 delivered a perfect storm of all three, in sequence:</p>
+<ol>
+<li><strong>Heat accelerates every stage.</strong> Warmer temperatures speed egg, larval and pupal
+development &mdash; in the mid-20s, <em>Culex</em> and <em>Anopheles</em> larvae hatch to adult in
+days rather than weeks. More generations fit into one season, and each generation is bigger. Dr
+Yasser Qureshi (mosquito-behaviour researcher) to <i>The Independent</i>: &ldquo;Higher temperatures
+speed up egg, larval and pupal development&hellip; humidity helps them survive longer.&rdquo;</li>
+<li><strong>The dry heat phase let populations accumulate.</strong> July&ndash;early August was hot
+and nearly rain-free (section 2). No cold snaps, no mass flooding to drown larvae &mdash; just
+compounding generations in whatever water was available (garden ponds, ditches, water butts).</li>
+<li><strong>The rain then triggered a floodwater hatch.</strong> The late-August/early-September
+downpours (~115mm in five weeks) flooded fenland ground and ditches at once. For <em>Aedes
+vexans</em>, that water returning to dry floodplain eggs is a <em>mass-hatch trigger</em> &mdash; the
+eggs are adapted to wait out desiccation and emerge all together when it floods. Multiply that by a
+summer's worth of accumulated <em>Culex</em>/<em>Culiseta</em> adults still active in mild
+temperatures, and you get the current situation: huge numbers of adults emerging <em>simultaneously</em>
+in the last warm weeks of the year.</li>
+<li><strong>Timing amplifies it.</strong> This generation is biting in September, when people are
+spending long evenings outdoors, when houses are less ventilated, and when a &ldquo;normal&rdquo;
+September bite count is near zero &mdash; so the contrast feels dramatic. It is: experts at LSHTM have
+explicitly warned that mild, humid September conditions keep native populations elevated well into
+autumn, and the Met Office is forecasting a wetter, stormier autumn (El Ni&ntilde;o influence), which
+could support another partial generation.</li>
+</ol>
+<div class="card callout">
+<strong>The one-line explanation for the neighbour:</strong> &ldquo;The heatwave let them build up all
+summer, and the rain in late August flushed the ditches full of newly hatched mosquitoes all at once.
+It's the weather, and it's all over the country &mdash; the NHS bite-page visits went up a third this
+summer.&rdquo;
+</div>
+</section>
+""")
+
+SECTIONS.append("""
+<section id="fens">
+<h2><span class="num">6</span> The Fenland factor &mdash; why here, why this hard</h2>
+<p>The Fens are a mosquito factory by construction. The landscape we live on is below or level with
+sea, held in check by one of the most complex drainage systems in Europe &mdash; rivers, internal
+drainage boards, main drains and ditches that have been managed (and re-managed) continuously since
+the great 17th-century drainages. For centuries, that same standing water was the source of
+&ldquo;ague&rdquo; (malaria) in Fenland &mdash; it was drained out of the county, not because
+mosquitoes left, but because the breeding water was removed from the ground people lived on.</p>
+<p>What that means in 2026:</p>
+<ul>
+<li><strong>Maximum breeding surface.</strong> Every ditch, main drain, silted channel, pond and
+flooded field is a nursery. A wet August in the Fens is not a weather event &mdash; it's a
+mosquito hatchery filling to the brim.</li>
+<li><strong>Floodwater species dominance.</strong> <em>Aedes vexans</em> is essentially a fenland
+specialist &mdash; it breeds on the margins of fluctuating water exactly where our drainage meets the
+fens. In drier counties with rockier ground, a wet month is a nuisance; here it's a population
+reset button.</li>
+<li><strong>Local, not exotic.</strong> The fact that your house and the one next door are both
+affected strongly points to a shared local source &mdash; a ditch, drain, pond or cluster of gardens
+within a couple of hundred metres. Adult <em>Culex</em> and <em>A. vexans</em> don't fly far; this is
+a neighbourhood-scale problem, which means it's also a neighbourhood-scale fix (section 7).</li>
+<li><strong>The drainage paradox.</strong> When the internal drainage boards run channels high (or a
+silted channel holds water), that's mosquito habitat. Low water levels and fast flow are not. If a
+particular drain or ditch is the obvious local hotspot, it's worth a call to the Fenland
+Internal Drainage Board / Environment Agency &mdash; but the bigger lever is the containers and ponds
+around the houses themselves.</li>
+</ul>
+</section>
+""")
+
+SECTIONS.append("""
+<section id="action">
+<h2><span class="num">7</span> What actually works</h2>
+<h3>A. Kill the breeding (the real solution)</h3>
+<p>Mosquitoes only need <strong>one capful of still water</strong> for 4&ndash;7 days. Walk the
+perimeter of both houses and clear everything:</p>
+<ul>
+<li><strong>Water butts:</strong> fine mesh lids (or a bit of Bti &mdash; see below). A lid with a gap
+smaller than a coin stops most.</li>
+<li><strong>Plant saucers and vases</strong> &mdash; empty and wipe weekly.</li>
+<li><strong>Buckets, tubs, bins, broken pots, wheelie bins</strong> &mdash; tip and turn upside down.</li>
+<li><strong>Children's paddling pools, ball pools</strong> &mdash; empty after use, or treat (below).</li>
+<li><strong>Bird baths:</strong> change water every 2&ndash;3 days, or scrub (eggs stuck to the side
+otherwise survive a change of water).</li>
+<li><strong>Blocked drains, downpipes, old tyres, leaf litter holding water</strong> &mdash; unblock
+and clear.</li>
+<li><strong>Ponds:</strong> the hard one. Options: add a few fish (even small goldfish eat larvae),
+steepen the banks, or treat with Bti (see below). A pond is a season-long nursery &mdash; if both
+houses share the view of one, that's likely your main source.</li>
+</ul>
+<div class="card callout">
+<strong>Bti &mdash; the clean weapon.</strong> <em>Bacillus thuringiensis israelensis</em> is a
+bacterium sold as granules, wafers or liquid (e.g. &ldquo;Mosquito Dunks&rdquo;) that kills mosquito
+larvae and <em>nothing else</em> of consequence (safe for fish, mammals, pets; it's been used in
+garden ponds for decades). Drop a wafer in water butts, ponds and bird baths before a wet spell and
+you remove the nursery without chemistry. UKHSA and public-health guidance specifically endorse
+standing-water removal; Bti is the standard adjunct for water you can't remove.
+</div>
+<p><strong>Cadence matters:</strong> do this <em>twice a week</em> while it's warm. Eggs can sit in
+dried containers and hatch when the next rain fills them &mdash; the autumn forecast suggests there
+will be next rains.</p>
+
+<h3>B. Stop the bites (personal)</h3>
+<ul>
+<li><strong>Repellent that works:</strong> DEET (20&ndash;50%), picaridin (10&ndash;20%) or IR3535 on
+exposed skin. These are the ones with real efficacy data; citronella &ldquo;mosquito bits&rdquo; and
+candles are essentially placebo for anything beyond a two-metre radius.</li>
+<li><strong>Permethrin on clothes</strong> (treat shirts/trousers before a long evening out; not for
+skin; wash out before re-wearing).</li>
+<li><strong>Timing:</strong> <em>Aedes vexans</em> is a dusk/dawn biter; <em>Culex</em> peaks
+night-time. If you can move big outdoor meals earlier or later, you dodge the peak.</li>
+<li><strong>Housing:</strong> fine mesh on any open window/vent that's getting incursions; a bedroom
+fan at medium genuinely interferes with their flight; screens on the bedroom window are the highest
+value-per-pound fix if bites are keeping you up at night.</li>
+<li><strong>Bite care:</strong> antihistamine cream or a cold compress for itch. If a bite gets hot,
+red, spreading or oozing &mdash; that's a secondary infection, see a GP. If you've recently travelled
+to a dengue/Zika/chikungunya area and develop fever within ~2 weeks of returning, tell your GP (not a
+concern for a home-grown bite, but the standard precaution).</li>
+</ul>
+<div class="card warn">
+<strong>Skip the noise.</strong> Ultrasonic repellers, &ldquo;mosquito magnets&rdquo;, bug zappers and
+citronella candles do not meaningfully reduce bites or populations. The zapper kills the odd straggler
+(and mostly harmless moths and midges); it does nothing at the source. Budget for mesh, Bti and DEET.
+</div>
+
+<h3>C. Help with surveillance (free, 2 minutes)</h3>
+<p>If you see something that looks like a small black-and-white <em>Aedes</em> (a single straight
+white stripe = tiger mosquito; a curved lyre shape = <em>Ae. aegypti</em>), take a clear photo and
+report it via <strong>UKHSA's Mosquito Watch</strong> scheme
+(<a href="https://www.gov.uk/guidance/mosquitoes-how-to-report">gov.uk/guidance/mosquitoes-how-to-report</a>) &mdash;
+photo, or a specimen frozen for 10 minutes in a crush-proof container. That's how the London finding
+was made. Even native-species photos help UKHSA map distributions.</p>
+</section>
+""")
+
+SECTIONS.append("""
+<section id="outlook">
+<h2><span class="num">8</span> The bigger picture</h2>
+<p>Strip away the 2026 specifics and the direction of travel is clear, and it's well-evidenced rather
+than speculative:</p>
+<ul>
+<li><strong>UK mosquitoes are becoming more active for longer.</strong> The early-2026 bite spike, the
+extended summer season, the September warning from LSHTM &mdash; all consistent. Warmer springs
+mean earlier first bites; warm autumns mean a final generation that would have been impossible in a
+2015 September.</li>
+<li><strong>Invasive incursions will keep coming.</strong> UKHSA says it explicitly: expect continued
+incursions of <em>Ae. aegypti</em> and <em>Ae. albopictus</em>, and increased reports of them
+surviving. The London breeding event is the first proof that a full life cycle is now possible in
+southern England in a hot summer. The Mediterranean is the current southern limit of their comfort;
+that line is moving north &mdash; the UK is now within a few hundred km of it, and importation
+pressure (trade, travel, potted plants) is at all-time highs.</li>
+<li><strong>Europe is already there.</strong> France's late-August 2026 locally-transmitted dengue,
+West Nile and chikungunya cases (including Paris) show the end state: local transmission in a
+temperate country. The UK is behind on the same curve, and West Nile detection in UK mosquitoes
+(Nottinghamshire, 2025) was the first domestic warning shot.</li>
+<li><strong>What it would take for real risk.</strong> An invasive <em>Aedes</em> surviving UK
+winters (establishment) + a sufficient human reservoir of the relevant virus + a long warm season.
+None of the first two are true yet. UKHSA's assessment &mdash; &ldquo;very low&rdquo; risk today,
+rising over decades, not years &mdash; is the honest one. The practical consequence isn't panic,
+it's the same standing-water hygiene that solves your September problem, done consistently.</li>
+</ul>
+<div class="card tldr">
+<strong>Bottom line for Whichford:</strong> 2026 was a freak-perfect year for mosquitoes &mdash;
+record heat + drought + a late deluge + a Fenland landscape full of floodwater eggs. It's a nuisance
+event, not a disease event. Clear the water, treat the ponds with Bti, mesh the bedroom, and expect
+the pressure to ease as the nights cool below ~15&deg;C. And keep an eye on UKHSA if the London
+situation escalates &mdash; though the odds of it reaching the Fens this year are essentially zero.
+</div>
+</section>
+""")
+
+SECTIONS.append("""
+<section id="sources">
+<h2>Sources &amp; further reading</h2>
+<ul>
+<li><strong>UKHSA</strong> &mdash; <a href="https://ukhsa.blog.gov.uk/2026/09/03/should-i-be-concerned-that-an-invasive-mosquito-species-has-been-detected-in-east-london/">"Should I be concerned that an invasive mosquito species has been detected in East London?"</a> (3 Sept 2026) &mdash; primary statement: risk assessment, control measures, Mosquito Watch, standing-water guidance.</li>
+<li><strong>GOV.UK</strong> &mdash; <a href="https://www.gov.uk/government/news/invasive-mosquito-species-detected-in-east-london">Invasive mosquito species detected in east London</a> (3 Sept 2026) &mdash; official government news release with Dr Jolyon Medlock's quotes.</li>
+<li><strong>BBC News</strong> &mdash; <a href="https://www.bbc.co.uk/news/articles/c93egqw1n09o">Invasive mosquitoes breed in London for the first time in the UK</a> (3 Sept 2026).</li>
+<li><strong>The Guardian</strong> &mdash; <a href="https://www.theguardian.com/environment/2026/sep/03/invasive-tropical-mosquito-breeding-london">Invasive tropical mosquito found breeding in east London</a> (3&ndash;4 Sept 2026) &mdash; Buglife biosecurity angle.</li>
+<li><strong>New Scientist</strong> &mdash; <a href="https://www.newscientist.com/article/2587789-how-worried-should-we-be-about-the-invasive-mosquitoes-in-the-uk/">How worried should we be about the invasive mosquitoes in the UK?</a> (4 Sept 2026) &mdash; best explainer: threat level, climate context, France's local transmission, prevention.</li>
+<li><strong>The Independent</strong> &mdash; <a href="https://www.independent.co.uk/news/uk/home-news/uk-mosquito-numbers-could-increase-in-september-due-to-warm-weather-b3051016.html">UK mosquito numbers could increase in September</a> (16 Sept 2026) &mdash; late-season native drivers, LSHTM "perfect for a surge" quote, NHS 35% bite-page stat.</li>
+<li><strong>The i</strong> &mdash; <a href="https://inews.co.uk/news/politics/youre-not-imagining-it-there-are-more-mosquitoes-in-the-uk-this-year-4761087">You're not imagining it, there are more mosquitoes in the UK this year</a> (12 Sept 2026) &mdash; NHS England figures (90,206&rarr;121,976 visits), NPA infected-bite reports, Imperial College expert commentary, hottest-summer-on-record confirmation.</li>
+<li><strong>LSHTM</strong> &mdash; <a href="https://www.lshtm.ac.uk/newsevents/news/2026/mosquitoes-uk-what-you-need-know">Mosquitoes in the UK: What you need to know</a> (26 June 2026, Dr Mojca Kristan) &mdash; native species list, weather/biology, early-2026 bite spike, wettest-start-of-year context.</li>
+<li><strong>That Bites! (UK vector dashboard)</strong> &mdash; <a href="https://thatbites.org.uk/education/aedes-albopictus/">Aedes albopictus profile</a> (Aug 2026) &mdash; UK tiger-mosquito detection history (Kent 2016&ndash;2019, M20 2024), identification, entry points.</li>
+<li><strong>Wikipedia</strong> &mdash; <a href="https://en.wikipedia.org/wiki/2026_United_Kingdom_heatwaves">2026 United Kingdom heatwaves</a> &mdash; heatwave dates, records (38.0&deg;C Lingwood, 35.1&deg;C Kew), red warnings, drought declarations. (Aggregated from Met Office / UKHSA / Environment Agency reporting.)</li>
+<li><strong>Open-Meteo historical weather archive</strong> &mdash; Ely, 1 Jul &ndash; 16 Sept 2026 (daily max/min temperature, precipitation). Data retrieved 17 Sept 2026; reanalysis, &plusmn;1&ndash;2&deg;C / &plusmn;2mm accuracy.</li>
+</ul>
+</section>
+""")
+
+# ---- Assemble ----
+HTML = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The UK Mosquito Surge, 2026 &mdash; A Deep Dive</title>
+<meta name="description" content="Why north Cambridgeshire has been overrun with mosquitoes in late summer 2026: the record heatwave, the late deluge, the new Aedes aegypti detection in London, and what to do about it.">
+<meta property="og:title" content="The UK Mosquito Surge, 2026">
+<meta property="og:description" content="Why the bites are everywhere in Ely this September &mdash; and what's actually going on.">
+<meta property="og:image" content="https://fr3qu3ncy.github.io/mosquito-surge-2026/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:type" content="website">
+<style>{CSS}</style>
+</head>
+<body>
+{''.join(SECTIONS)}
+<footer>
+<div class="wrap">
+<p>Compiled 17 September 2026 &middot; Weather data: Open-Meteo archive (Ely) &middot; News and
+official reporting from 26 June &ndash; 16 September 2026. This page is an informational summary for
+neighbourly discussion, not medical advice &mdash; for bite-related health concerns see the NHS or
+your GP; for mosquito sightings report to UKHSA Mosquito Watch.</p>
+</div>
+</footer>
+</body>
+</html>
+"""
+
+with open(f"{BASE}/index.html", "w") as f:
+    f.write(HTML)
+print(f"index.html: {len(HTML)} bytes")
+
+with open(f"{BASE}/.nojekyll", "w") as f:
+    f.write("")
+
+# ---- OG image via PIL ----
+from PIL import Image, ImageDraw, ImageFont
+
+img = Image.new("RGB", (1200, 630), "#0d1117")
+d = ImageDraw.Draw(img)
+
+def load_font(size, bold=False):
+    paths = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ]
+    for p in paths:
+        try:
+            return ImageFont.truetype(p, size)
+        except OSError:
+            pass
+    return ImageFont.load_default()
+
+# accent bar
+d.rectangle([0, 0, 1200, 10], fill="#56d364")
+# mosquito-ish glyph (simple)
+f_kick = load_font(30)
+f_title = load_font(92, bold=True)
+f_sub = load_font(34)
+f_date = load_font(28)
+
+d.text((60, 120), "DEEP DIVE  \u00b7  17 SEPTEMBER 2026", font=f_kick, fill="#56d364")
+d.text((60, 180), "The UK Mosquito", font=f_title, fill="#e6edf3")
+d.text((60, 285), "Surge, 2026", font=f_title, fill="#e6edf3")
+d.text((60, 415), "Why the bites are everywhere in Ely \u2014 and what's", font=f_sub, fill="#8b949e")
+d.text((60, 465), "actually going on.", font=f_sub, fill="#8b949e")
+d.text((60, 545), "Heatwave \u2192 deluge \u2192 floodwater hatch  \u00b7  Aedes aegypti in London  \u00b7  what to do",
+       font=f_date, fill="#58a6ff")
+d.rectangle([0, 620, 1200, 630], fill="#56d364")
+
+img.save(f"{BASE}/og-image.png")
+import os
+print(f"og-image.png: {os.path.getsize(BASE + '/og-image.png')} bytes")
