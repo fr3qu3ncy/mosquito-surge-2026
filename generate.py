@@ -222,7 +222,7 @@ SECTIONS.append(f"""
   <audio id="podcast-audio" src="podcast.mp3" preload="metadata"></audio>
 </div>
 </section>
-{PLAYER_JS}
+<script>{PLAYER_JS}</script>
 """)
 
 SECTIONS.append("""

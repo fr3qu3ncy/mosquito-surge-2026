@@ -120,7 +120,7 @@ footer .wrap { padding-top: 1.5rem; padding-bottom: 2.5rem; }
   <audio id="podcast-audio" src="podcast.mp3" preload="metadata"></audio>
 </div>
 </section>
-
+<script>
 (function(){
   var audio = document.getElementById('podcast-audio');
   var btn = document.getElementById('play-btn');
@@ -152,7 +152,7 @@ footer .wrap { padding-top: 1.5rem; padding-bottom: 2.5rem; }
     if(isFinite(audio.duration)) audio.currentTime = p * audio.duration;
   });
 })();
-
+</script>
 
 <section id="tldr">
 <div class="card tldr">
